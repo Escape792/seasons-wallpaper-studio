@@ -1,0 +1,19 @@
+{
+  "name": "seasons-wallpaper-studio",
+  "version": "1.0.0",
+  "description": "四季动态循环壁纸工作室：同一场景四季切换、参数可调、无缝循环、可导出 MP4",
+  "type": "module",
+  "scripts": {
+    "start": "python -m http.server 8080",
+    "preview": "node tools/preview.mjs",
+    "render": "node tools/render.mjs",
+    "batch": "node tools/batch.mjs landscape",
+    "batch:portrait": "node tools/batch.mjs portrait"
+  },
+  "keywords": ["wallpaper", "dynamic-wallpaper", "canvas", "seasons", "loop", "mp4"],
+  "license": "MIT",
+  "devDependencies": {
+    "ffmpeg-static": "^5.2.0",
+    "puppeteer-core": "^23.11.1"
+  }
+}

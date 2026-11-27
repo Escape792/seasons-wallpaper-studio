@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>四季动态壁纸工作室 · Seasons Wallpaper Studio</title>
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<div id="app">
+
+  <!-- ============ 预览舞台 ============ -->
+  <main id="stage">
+    <div id="frame">
+      <canvas id="cv"></canvas>
+      <div id="guides" class="guides hidden">
+        <div class="guide guide-top"><span>图标安全区 · 上</span></div>
+        <div class="guide guide-mid"><span>图标安全区 · 中部</span></div>
+      </div>
+      <div id="stageBadge" class="badge">山谷湖畔 · 春 · 治愈写实 · 1920×1080</div>
+    </div>
+  </main>
+
+  <!-- ============ 控制面板 ============ -->
+  <aside id="panel">
+    <header class="panel-head">
+      <h1>四季动态壁纸 <span>Wallpaper Studio</span></h1>
+      <button id="btnCollapse" class="icon-btn" title="折叠面板 (H)">⟨</button>
+    </header>
+
+    <div class="panel-body">
+
+      <section class="grp">
+        <div class="grp-title">场景</div>
+        <div class="chips" id="sceneChips"></div>
+      </section>
+
+      <section class="grp">
+        <div class="grp-title">画风</div>
+        <div class="chips" id="styleChips"></div>
+      </section>
+
+      <section class="grp">
+        <div class="grp-title">季节</div>
+        <div class="chips" id="seasonChips"></div>
+        <label class="row toggle">
+          <span>自动轮播（缓慢过渡）</span>
+          <input type="checkbox" id="autoSeason">
+        </label>
+      </section>
+
+      <section class="grp">
+        <div class="grp-title">光照与氛围</div>
+        <label class="row slider">
+          <span>阳光角度</span>
+          <input type="range" id="sunAngle" min="0" max="360" step="1" value="118">
+          <em id="sunAngleVal">118°</em>
+        </label>
+        <label class="row slider">
+          <span>雾气浓度</span>
+          <input type="range" id="fog" min="0" max="100" step="1" value="26">
+          <em id="fogVal">26</em>
+        </label>
+        <label class="row slider">
+          <span>风力强弱</span>
+          <input type="range" id="wind" min="0" max="100" step="1" value="34">
+          <em id="windVal">34</em>
+        </label>
+        <label class="row slider">
+          <span>飘落速度</span>
+          <input type="range" id="fall" min="0" max="100" step="1" value="42">
+          <em id="fallVal">42</em>
+        </label>
+      </section>
+
+      <section class="grp">
+        <div class="grp-title">画面</div>
+        <label class="row slider">
+          <span>画面比例</span>
+          <select id="aspect">
+            <option value="16:9" selected>16:9 · 电脑</option>
+            <option value="9:16">9:16 · 手机</option>
+            <option value="21:9">21:9 · 带鱼屏</option>
+            <option value="1:1">1:1 · 方形</option>
+            <option value="4:3">4:3 · 复古</option>
+          </select>
+        </label>
+        <label class="row slider">
+          <span>循环时长</span>
+          <input type="range" id="loopLen" min="6" max="30" step="1" value="12">
+          <em id="loopLenVal">12s</em>
+        </label>
+        <label class="row slider">
+          <span>镜头呼吸</span>
+          <input type="range" id="breathe" min="0" max="100" step="1" value="30">
+          <em id="breatheVal">30</em>
+        </label>
+        <label class="row toggle">
+          <span>显示图标安全区</span>
+          <input type="checkbox" id="showGuides">
+        </label>
+      </section>
+
+      <section class="grp">
+        <div class="grp-title">输出</div>
+        <div class="btn-grid">
+          <button class="btn primary" id="btnRecord">录制循环视频</button>
+          <button class="btn" id="btnPng">导出当前帧 PNG</button>
+          <button class="btn" id="btnFull">全屏预览</button>
+          <button class="btn" id="btnWall">壁纸模式</button>
+        </div>
+        <div class="btn-grid">
+          <button class="btn" id="btnReset">重置参数</button>
+          <button class="btn" id="btnCopy">复制参数</button>
+        </div>
+        <div class="hint" id="recHint">录制输出 WebM（无损循环）。MP4 批量导出请用仓库内 <code>tools/</code> 脚本。</div>
+      </section>
+
+      <section class="grp">
+        <div class="grp-title">状态</div>
+        <div class="stat" id="stat">—</div>
+      </section>
+    </div>
+  </aside>
+</div>
+
+<div id="recOverlay" class="overlay hidden">
+  <div class="rec-box">
+    <div class="rec-dot"></div>
+    <div class="rec-text">正在录制循环视频… <b id="recTime">0.0s</b></div>
+    <button class="btn" id="btnRecStop">结束录制</button>
+  </div>
+</div>
+
+<script src="js/util.js"></script>
+<script src="js/assets.js"></script>
+<script src="js/scene.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
