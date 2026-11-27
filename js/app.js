@@ -11,11 +11,12 @@
   const guides = document.getElementById('guides');
 
   const loader = A.createAssetLoader('assets/scenes/');
-  const renderer = global.WS.Scene.createRenderer(canvas, loader);
+  const petLoader = A.createPetLoader('assets/pet/');
+  const renderer = global.WS.Scene.createRenderer(canvas, loader, petLoader);
   const R = renderer.state;
 
   const DEFAULTS = {
-    scene: 'valley', season: 'spring', style: 'real',
+    scene: 'forest-rain-l', season: 'spring', style: 'real',
     sunAngle: 118, fog: 26, wind: 34, fall: 42,
     loopLen: 12, breathe: 30, aspect: '16:9', autoSeason: false
   };
@@ -100,14 +101,22 @@
   const sceneChips = document.getElementById('sceneChips');
   const styleChips = document.getElementById('styleChips');
   const seasonChips = document.getElementById('seasonChips');
+  const petChips = document.getElementById('petChips');
 
   const sceneMap = {}, styleMap = {}, seasonMap = { spring: '春', summer: '夏', autumn: '秋', winter: '冬' };
+  const petMap = {};
   Object.keys(A.SCENE_META).forEach(k => sceneMap[k] = A.SCENE_META[k].name);
   Object.keys(A.STYLE_META).forEach(k => styleMap[k] = A.STYLE_META[k].name);
+  Object.keys(A.PET_KINDS).forEach(k => petMap[k] = A.PET_KINDS[k].name);
 
   buildChips(sceneChips, sceneMap, k => { setScene(k); updateBadge(); });
   buildChips(styleChips, styleMap, k => { renderer.setStyle(k); R.style = k; markChips(styleChips, k); updateBadge(); });
   buildChips(seasonChips, seasonMap, k => setSeason(k, true));
+  buildChips(petChips, petMap, k => {
+    renderer.setPetKind(k);
+    markChips(petChips, k);
+    document.getElementById('petHint').textContent = '已换成「' + petMap[k] + '」· 左键抚摸 · 右键投喂';
+  });
 
   function setScene(k) {
     renderer.setScene(k); R.scene = k;
@@ -119,7 +128,6 @@
     if (syncUI) markChips(seasonChips, k);
     updateBadge();
   }
-
   const DIMS = {
     '16:9': '1920×1080', '9:16': '1080×1920', '21:9': '2560×1080',
     '1:1': '1440×1440', '4:3': '1440×1080'
@@ -150,15 +158,78 @@
 
   document.getElementById('aspect').addEventListener('change', e => {
     aspect = e.target.value;
-    // 竖屏使用独立母版图（若该场景提供）
     renderer.setParam('portrait', aspect === '9:16');
+    // 比例变化时自动切换到对应的母版（竖版 / 横版）
+    applyAspectScene();
     fit(); updateBadge();
   });
+
+  /* 比例 → 母版场景映射 */
+  function applyAspectScene() {
+    const cur = R.scene;
+    if (cur === 'forest-rain' || cur === 'forest-rain-l') {
+      const want = aspect === '9:16' ? 'forest-rain' : 'forest-rain-l';
+      if (want !== cur) { setScene(want); return; }
+    }
+    markChips(sceneChips, R.scene);
+  }
   document.getElementById('autoSeason').addEventListener('change', e => {
     autoSeason = e.target.checked; autoTimer = 0;
   });
   document.getElementById('showGuides').addEventListener('change', e => {
     guides.classList.toggle('hidden', !e.target.checked);
+  });
+
+  /* ---------- 宠物交互 ---------- */
+  /* 鼠标坐标 → 画面相对坐标 */
+  function canvasPos(ev) {
+    const r = canvas.getBoundingClientRect();
+    return {
+      x: (ev.clientX - r.left) / r.width,
+      y: (ev.clientY - r.top) / r.height
+    };
+  }
+
+  canvas.addEventListener('mousemove', ev => {
+    const p = canvasPos(ev);
+    renderer.petMove(p.x, p.y);
+  });
+  canvas.addEventListener('mouseleave', () => {
+    renderer.petMove(-1, -1);
+    renderer.petSetCursor(-1, -1, false);
+  });
+  canvas.addEventListener('mousedown', ev => {
+    const p = canvasPos(ev);
+    renderer.petDown(p.x, p.y);
+  });
+  window.addEventListener('mouseup', () => renderer.petUp());
+  canvas.addEventListener('contextmenu', ev => {
+    ev.preventDefault();
+    const p = canvasPos(ev);
+    renderer.petFeed(p.x, p.y);      // 右键 = 丢猫粮
+  });
+
+  /* 喂食按钮 */
+  document.getElementById('btnFeed').addEventListener('click', () => {
+    const zone = renderer.pet.state;
+    const x = zone.x + (Math.random() - 0.5) * 0.16;
+    renderer.petFeed(Math.max(0.08, Math.min(0.92, x)), 0.93);
+  });
+
+  /* 宠物开关 */
+  document.getElementById('petOn').addEventListener('change', e => {
+    renderer.setPetEnabled(e.target.checked);
+    document.getElementById('petHint').textContent = e.target.checked
+      ? '左键抚摸 · 右键投喂 · 靠近它会看向光标'
+      : '宠物已隐藏';
+  });
+
+  /* 呼唤它：看向光标并靠近 */
+  document.getElementById('btnPetCall').addEventListener('click', () => {
+    const st = renderer.pet.state;
+    st.affection = Math.min(1, st.affection + 0.1);
+    renderer.pet.say('喵？', 2.0);
+    renderer.pet.setState('alert');
   });
 
   /* ---------- 折叠面板 ---------- */
@@ -212,7 +283,7 @@
     renderer.setSeason(DEFAULTS.season);
     renderer.setStyle(DEFAULTS.style);
     R.scene = DEFAULTS.scene; R.season = DEFAULTS.season; R.style = DEFAULTS.style;
-    markChips(sceneChips, 'valley'); markChips(seasonChips, 'spring'); markChips(styleChips, 'real');
+    markChips(sceneChips, 'forest-rain-l'); markChips(seasonChips, 'spring'); markChips(styleChips, 'real');
     aspect = DEFAULTS.aspect;
     document.getElementById('aspect').value = aspect;
     autoSeason = false;
@@ -285,6 +356,7 @@
   markChips(sceneChips, R.scene);
   markChips(styleChips, R.style);
   markChips(seasonChips, R.season);
+  markChips(petChips, renderer.petKind());
   fit();
   updateBadge();
   requestAnimationFrame(tick);
@@ -295,11 +367,12 @@
     setScene(k) { setScene(k); },
     setSeason(k) { setSeason(k, true); },
     setStyle(k) { renderer.setStyle(k); R.style = k; markChips(styleChips, k); },
+    setPetKind(k) { renderer.setPetKind(k); markChips(petChips, k); },
     setParam(k, v) { renderer.setParam(k, v); },
     renderPhase(p) { renderer.render(p); },
     setFrozen(v) { frozen = !!v; },
     waitReady() { return new Promise(res => renderer.onReady(res)); },
-    getState() { return Object.assign({}, R, { aspect }); },
+    getState() { return Object.assign({}, R, { aspect, petKind: renderer.petKind() }); },
     setAspect(a) {
       aspect = a;
       document.getElementById('aspect').value = a;

@@ -69,8 +69,8 @@ const FFMPEG = findFfmpeg();
 if (!FFMPEG) { console.error('找不到 ffmpeg，请先安装（Gyan.FFmpeg）或 npm i ffmpeg-static'); process.exit(1); }
 
 /* ---------- 主流程 ---------- */
-const frameDir = join(ROOT, '.frames', basename(OPT.out).replace(/\.[^.]+$/, ''));
-if (existsSync(frameDir)) rmSync(frameDir, { recursive: true, force: true });
+// 帧目录复用（每次渲染覆盖），避免产生大批量临时文件
+const frameDir = join(ROOT, '.frames', 'frames');
 mkdirSync(frameDir, { recursive: true });
 mkdirSync(dirname(resolve(ROOT, OPT.out)), { recursive: true });
 
@@ -123,10 +123,10 @@ for (let i = 0; i < total; i++) {
   const dataUrl = await page.evaluate(async (ph) => {
     window.WSApp.renderPhase(ph);
     await new Promise(r => requestAnimationFrame(() => r()));
-    return window.WSApp.canvas.toDataURL('image/png');
+    return window.WSApp.canvas.toDataURL('image/jpeg', 0.97);
   }, phase);
   const buf = Buffer.from(dataUrl.split(',')[1], 'base64');
-  writeFileSync(join(frameDir, 'f' + String(i).padStart(5, '0') + '.png'), buf);
+  writeFileSync(join(frameDir, 'f' + String(i).padStart(5, '0') + '.jpg'), buf);
   if (i % 15 === 0) process.stdout.write(`  frame ${i}/${total}\r`);
 }
 console.log(`  frames ok: ${total}          `);
@@ -140,15 +140,15 @@ const isWebm = /\.webm$/i.test(OPT.out);
 
 let args;
 if (isGif) {
-  args = ['-y', '-framerate', String(OPT.fps), '-i', join(frameDir, 'f%05d.png'),
+  args = ['-y', '-framerate', String(OPT.fps), '-i', join(frameDir, 'f%05d.jpg'),
     '-vf', `fps=${OPT.fps},scale=${OPT.width}:${OPT.height}:flags=lanczos,split[a][b];[a]palettegen=max_colors=192[p];[b][p]paletteuse=dither=sierra2_4a`,
     '-loop', '0', outPath];
 } else if (isWebm) {
-  args = ['-y', '-framerate', String(OPT.fps), '-i', join(frameDir, 'f%05d.png'),
+  args = ['-y', '-framerate', String(OPT.fps), '-i', join(frameDir, 'f%05d.jpg'),
     '-c:v', 'libvpx-vp9', '-crf', '30', '-b:v', '0', '-pix_fmt', 'yuv420p',
     '-an', outPath];
 } else {
-  args = ['-y', '-framerate', String(OPT.fps), '-i', join(frameDir, 'f%05d.png'),
+  args = ['-y', '-framerate', String(OPT.fps), '-i', join(frameDir, 'f%05d.jpg'),
     '-c:v', 'libx264', '-preset', OPT.quality === 'high' ? 'slow' : 'medium',
     '-crf', '19', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', '-an', outPath];
 }
@@ -159,5 +159,4 @@ await new Promise((res, rej) => {
   p.on('close', code => code === 0 ? res() : rej(new Error('ffmpeg exit ' + code)));
 });
 
-if (!OPT.keepFrames) rmSync(frameDir, { recursive: true, force: true });
 console.log('[done]', outPath);

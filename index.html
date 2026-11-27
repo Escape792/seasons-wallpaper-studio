@@ -102,6 +102,20 @@
       </section>
 
       <section class="grp">
+        <div class="grp-title">宠物互动</div>
+        <label class="row toggle">
+          <span>显示宠物</span>
+          <input type="checkbox" id="petOn" checked>
+        </label>
+        <div class="chips" id="petChips"></div>
+        <div class="btn-grid">
+          <button class="btn" id="btnFeed">投喂猫粮</button>
+          <button class="btn" id="btnPetCall">呼唤它</button>
+        </div>
+        <div class="hint" id="petHint">左键抚摸 · 右键投喂 · 靠近它会看向光标</div>
+      </section>
+
+      <section class="grp">
         <div class="grp-title">输出</div>
         <div class="btn-grid">
           <button class="btn primary" id="btnRecord">录制循环视频</button>
@@ -134,6 +148,7 @@
 
 <script src="js/util.js"></script>
 <script src="js/assets.js"></script>
+<script src="js/pet.js"></script>
 <script src="js/scene.js"></script>
 <script src="js/app.js"></script>
 </body>

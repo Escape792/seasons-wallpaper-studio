@@ -26,31 +26,24 @@
      iconMid  中部图标安全区下界
   */
   const SCENE_META = {
-    valley: {
-      name: '山谷湖畔', horizon: 0.78, water: true,
-      mist: [0.62, 0.72], foliage: [0.86, 1.0], sky: 0.42, iconMid: 0.30,
-      tint: { spring: '#cfe0e8', summer: '#c9dcd2', autumn: '#e0cba8', winter: '#d2dde8' }
+    'forest-rain-l': {
+      name: '雨后林径 · 横版', horizon: 0.66, water: true,
+      mist: [0.46, 0.62], foliage: [0.78, 1.0], grassBand: [0.88, 1.0],
+      sky: 0.22, iconMid: 0.14,
+      tint: { spring: '#cfe0d8', summer: '#c8ded0', autumn: '#e2cba6', winter: '#cfd9e2' }
     },
-    path: {
-      name: '林间小路', horizon: 0.0, water: false,
-      mist: [0.45, 0.68], foliage: [0.70, 1.0], sky: 0.16, iconMid: 0.12,
-      tint: { spring: '#d8e6d4', summer: '#cfe0c8', autumn: '#e4d3ae', winter: '#d6dfe8' }
-    },
-    court: {
-      name: '中式庭院', horizon: 0.72, water: true,
-      mist: [0.55, 0.70], foliage: [0.72, 1.0], sky: 0.34, iconMid: 0.26,
-      tint: { spring: '#dde4dc', summer: '#d6e2d4', autumn: '#e6d6bc', winter: '#dbe2ea' }
-    },
-    sea: {
-      name: '海边', horizon: 0.62, water: true,
-      mist: [0.52, 0.66], foliage: [0.72, 0.86], sky: 0.44, iconMid: 0.32,
-      tint: { spring: '#d6e2e6', summer: '#d8e2d8', autumn: '#ecd8b4', winter: '#d8e2ea' }
-    },
-    forest: {
-      name: '森林', horizon: 0.0, water: false,
-      mist: [0.30, 0.58], foliage: [0.72, 1.0], sky: 0.14, iconMid: 0.10,
-      tint: { spring: '#d6e4d4', summer: '#cddfca', autumn: '#e2d2ae', winter: '#d4dee8' }
+    'forest-rain': {
+      name: '雨后林径 · 竖版', horizon: 0.72, water: true,
+      mist: [0.52, 0.68], foliage: [0.82, 1.0], grassBand: [0.92, 1.0],
+      sky: 0.26, iconMid: 0.18,
+      tint: { spring: '#cfe0d8', summer: '#c8ded0', autumn: '#e2cba6', winter: '#cfd9e2' }
     }
+  };
+
+  /* 可选宠物：每种宠物有 idle / walk / happy 三姿态 */
+  const PET_KINDS = {
+    blue: { name: '蓝猫宝', sprites: { idle: 'blue-idle', walk: 'blue-walk', happy: 'blue-happy' }, scale: 0.20 },
+    fluffy: { name: '毛茸茸', sprites: { idle: 'fluffy-idle', walk: 'fluffy-walk', happy: 'fluffy-happy' }, scale: 0.24 }
   };
 
   /* 画风：LUT 色调 + 后期强度 + 粒子/光效风格 */
@@ -83,15 +76,15 @@
   };
 
   /* ---------------- 素材加载器 ---------------- */
-  /* 竖版（9:16）使用独立母版图（<scene>-portrait 目录），构图与横版一致但取景更适合手机 */
-  const PORTRAIT_SCENES = { valley: true };
+  /* 竖版素材目录（横版场景在竖屏时用独立母版） */
+  const PORTRAIT_SCENES = {};
 
   function createAssetLoader(basePath) {
     const cache = new Map();
     const base = basePath || 'assets/scenes/';
 
     function folderFor(scene, portrait) {
-      if (portrait && PORTRAIT_SCENES[scene]) return scene + '-portrait/';
+      if (portrait && PORTRAIT_SCENES[scene]) return PORTRAIT_SCENES[scene] + '/';
       return scene + '/';
     }
 
@@ -119,7 +112,24 @@
   }
 
   global.WS.Assets = {
-    SCENE_META, STYLE_META, SEASON_FILES, PORTRAIT_SCENES,
-    createAssetLoader
+    SCENE_META, STYLE_META, SEASON_FILES, PORTRAIT_SCENES, PET_KINDS,
+    createAssetLoader,
+    /* 宠物精灵图加载器（按 kind 缓存） */
+    createPetLoader(basePath) {
+      const cache = new Map();
+      const base = basePath || 'assets/pet/';
+      function load(name) {
+        if (cache.has(name)) return cache.get(name);
+        const img = new Image();
+        const p = new Promise((res, rej) => {
+          img.onload = () => res(img);
+          img.onerror = () => rej(new Error('宠物素材加载失败: ' + base + name + '.png'));
+        });
+        img.src = base + name + '.png';
+        cache.set(name, p);
+        return p;
+      }
+      return { load };
+    }
   };
 })(window);

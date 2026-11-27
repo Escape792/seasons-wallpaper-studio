@@ -19,17 +19,56 @@
     winter: { particle: 'snow', pcount: 1.25, pSize: 0.85, pSpin: 0.3, haze: 1.15, glint: 0.25 }
   };
 
-  function createRenderer(canvas, loader) {
+  /* 宠物活动区域（画面相对坐标）
+     y      脚底所在高度
+     x0/x1  活动范围
+     scale  相对画面高度（宠物类型的默认值会被覆盖）
+     light  受光方向与强度：'front' 正面受光 | 'back' 逆光剪影 | 'side' 侧光
+  */
+  const PET_ZONE = {
+    'forest-rain': { y: 0.885, x0: 0.12, x1: 0.88, scale: 0.30, light: 'side' },
+    'forest-rain-l': { y: 0.870, x0: 0.14, x1: 0.86, scale: 0.185, light: 'side' }
+  };
+
+  function createRenderer(canvas, loader, petLoader) {
     const ctx = canvas.getContext('2d');
-    const fx = document.createElement('canvas');    // 动态效果层
+    const scene = document.createElement('canvas');   // 场景层（底图 + 前景 + 宠物）
+    const sctx = scene.getContext('2d');
+    const fx = document.createElement('canvas');      // 动态效果层（雾/光/粒子）
     const fctx = fx.getContext('2d');
-    const comp = document.createElement('canvas');  // 合成层
+    const comp = document.createElement('canvas');    // 合成层
     const cctx = comp.getContext('2d');
     const grainTiles = [];
     const GW = 256;
 
+    /* ---------- 宠物：多类型可选 ---------- */
+    const petSprites = {};          // kind -> { idle, walk, happy }
+    let petKind = 'blue';
+    let petReady = false;
+
+    function loadPetKind(kind) {
+      const def = A.PET_KINDS[kind];
+      if (!def) return Promise.resolve();
+      if (petSprites[kind]) { petReady = true; return Promise.resolve(); }
+      const holder = {};
+      return Promise.all(Object.keys(def.sprites).map(k =>
+        petLoader.load(def.sprites[k]).then(img => { holder[k] = img; })
+      )).then(() => { petSprites[kind] = holder; petReady = true; });
+    }
+    if (petLoader) {
+      loadPetKind('blue').catch(e => console.error(e));
+      loadPetKind('fluffy').catch(e => console.error(e));
+    }
+
+    const pet = global.WS.Pet.createPet({
+      x: 0.62, y: (PET_ZONE['forest-rain-l']).y,
+      scale: (PET_ZONE['forest-rain-l']).scale, facing: -1
+    });
+    let petEnabled = true;
+    let lastPetTime = 0;
+
     const state = {
-      scene: 'valley', season: 'spring', style: 'real',
+      scene: 'forest-rain-l', season: 'spring', style: 'real',
       sunAngle: 118, fog: 26, wind: 34, fall: 42,
       loopLen: 12, breathe: 30, phase: 0, portrait: false
     };
@@ -43,9 +82,11 @@
     function resize(w, h, dpr) {
       canvas.width = Math.round(w * dpr);
       canvas.height = Math.round(h * dpr);
+      scene.width = canvas.width; scene.height = canvas.height;
       fx.width = canvas.width; fx.height = canvas.height;
       comp.width = canvas.width; comp.height = canvas.height;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      sctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       fctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       cctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       canvas._dpr = dpr;
@@ -218,24 +259,50 @@
     }
 
     /* --- 前景草木摇曳（对照片底部做水平错位，形成风吹草动）--- */
+    /* --- 前景草木：底部草叶随风摆动（直接绘制，不依赖底图）--- */
+    function drawGrass(f, W, H, band, p, st, phase, windK) {
+      if (!band) return;
+      const y0 = H * band[0], y1 = H * band[1];
+      const bh = y1 - y0;
+      if (bh <= 4) return;
+      const base = U.hex2rgb(p.ground);
+      const dark = U.shade(base, 0.62);
+      const snowy = state.season === 'winter';
+      const n = 110;
+      for (let i = 0; i < n; i++) {
+        const r1 = U.hash1(i * 1.37), r2 = U.hash1(i * 2.71), r3 = U.hash1(i * 4.13);
+        const x = r1 * W;
+        const h = (0.10 + r2 * 0.30) * bh;
+        const y = y1 - r3 * bh * 0.25;
+        const sway = Math.sin(phase * TAU * 3 + r2 * TAU) * windK * 0.22 * h;
+        const col = U.mixRgb(base, dark, 0.2 + r3 * 0.5);
+        f.strokeStyle = U.rgba(snowy ? U.mixRgb(col, U.hex2rgb(p.snow), 0.4) : col, 0.85);
+        f.lineWidth = Math.max(0.7, H * 0.0016 * (0.7 + r2));
+        f.beginPath();
+        f.moveTo(x, y);
+        f.quadraticCurveTo(x + sway * 0.4, y - h * 0.6, x + sway, y - h);
+        f.stroke();
+      }
+    }
+
     function drawFoliage(f, W, H, meta, phase, strength) {
       const band = meta.foliage;
       if (!band || strength < 0.03) return;
       const y0 = H * band[0], y1 = H * band[1];
       const bh = y1 - y0;
       if (bh <= 4) return;
-      // 叶片层：整段做轻微水平位移 + 亮度调制（模拟风动）
+      // 前景带做轻微水平位移与亮度调制，模拟风吹草动
       f.save();
       f.globalCompositeOperation = 'overlay';
-      const strips = 16;
+      const strips = 14;
       for (let i = 0; i < strips; i++) {
         const u = i / strips;
         const sy = y0 + u * bh;
         const sh = bh / strips + 1;
-        const dx = Math.sin(phase * TAU * 2 + u * 4.2) * strength * W * 0.004;
-        f.globalAlpha = 0.10 * strength;
-        f.drawImage(baseImg,
-          0, (sy / H) * baseImg.height, baseImg.width, (sh / H) * baseImg.height,
+        const dx = Math.sin(phase * TAU * 2 + u * 4.2) * strength * W * 0.0035;
+        f.globalAlpha = 0.07 * strength;
+        f.drawImage(scene,
+          0, sy * (scene.height / H), scene.width, sh * (scene.height / H),
           dx, sy, W, sh + 1);
       }
       f.restore();
@@ -381,6 +448,7 @@
       const meta = A.SCENE_META[state.scene];
       const sty = A.STYLE_META[state.style];
       const cfg = SEASON_FX[state.season];
+      const p = U.PALETTES[state.season];
 
       ensureBase();
       if (!baseImg) {
@@ -398,20 +466,56 @@
 
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, W, H);
-      ctx.save();
-      ctx.translate(W / 2 + panX, H / 2 + panY);
-      ctx.scale(zoom, zoom);
-      ctx.translate(-W / 2, -H / 2);
-      // cover 裁切
+      sctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      sctx.clearRect(0, 0, W, H);
+      sctx.save();
+      sctx.translate(W / 2 + panX, H / 2 + panY);
+      sctx.scale(zoom, zoom);
+      sctx.translate(-W / 2, -H / 2);
+      // cover 裁切（竖版素材不额外裁切，横向素材按 42% 偏上取景）
       const ir = baseImg.width / baseImg.height;
       const cr = W / H;
       let sw, sh, sx, sy;
       if (ir > cr) { sh = baseImg.height; sw = sh * cr; sx = (baseImg.width - sw) / 2; sy = 0; }
       else { sw = baseImg.width; sh = sw / cr; sx = 0; sy = (baseImg.height - sh) * 0.42; }
-      ctx.drawImage(baseImg, sx, sy, sw, sh, 0, 0, W, H);
-      ctx.restore();
+      sctx.drawImage(baseImg, sx, sy, sw, sh, 0, 0, W, H);
+      sctx.restore();
 
-      /* --- 2. 动态效果层 --- */
+      /* --- 2. 地面 / 水面 / 前景草地 --- */
+      /* 注：底图本身已包含水面与倒影（写实母版），此处只补动态前景 */
+      drawGrass(sctx, W, H, meta.grassBand, p, sty, phase, state.wind / 100);
+
+      /* --- 2.5 宠物（画面内互动角色）：在前景草木之后、雾气之前 --- */
+      if (petReady && petEnabled && petSprites[petKind]) {
+        const zone = PET_ZONE[state.scene] || PET_ZONE['forest-rain-l'];
+        // 宠物动画使用独立时间轴（不影响壁纸循环数学）
+        const now = performance.now();
+        const dt = lastPetTime ? Math.min(0.05, (now - lastPetTime) / 1000) : 0;
+        lastPetTime = now;
+        pet.setPosition(pet.state.x, zone.y);
+        pet.opts.scale = zone.scale * (A.PET_KINDS[petKind] ? A.PET_KINDS[petKind].scale / 0.22 : 1);        pet.update(dt, zone.y, { x0: zone.x0, x1: zone.x1 });
+
+        // 让宠物接受场景光照：主光来自太阳位置，环境色来自季节色调
+        const tintCol = U.hex2rgb(meta.tint[state.season] || '#d8e2e8');
+        const sunCol = U.hex2rgb(p.sun);
+        const env = [
+          (tintCol[0] * 0.55 + sunCol[0] * 0.45),
+          (tintCol[1] * 0.55 + sunCol[1] * 0.45),
+          (tintCol[2] * 0.55 + sunCol[2] * 0.45)
+        ];
+        pet.draw(sctx, W, H, petSprites[petKind], {
+          light: zone.light,
+          tintColor: env,
+          tintStrength: 0.20 + state.fog / 100 * 0.18,
+          rimColor: sunCol,
+          hazeAmount: state.fog / 100 * 0.10,
+          hazeColor: U.rgba(U.hex2rgb(p.haze), 1),
+          groundWet: state.scene === 'forest-rain'
+        });
+        pet.drawFood(sctx, W, H);
+      }
+
+      /* --- 1.5 动态效果层（雾 / 阳光 / 波光 / 草木 / 粒子）--- */
       fctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       fctx.clearRect(0, 0, W, H);
       const fogK = (state.fog / 100) * cfg.haze;
@@ -425,7 +529,7 @@
       /* --- 3. 合成 + 调色 --- */
       cctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       cctx.clearRect(0, 0, W, H);
-      cctx.drawImage(canvas, 0, 0, canvas.width, canvas.height, 0, 0, W, H);
+      cctx.drawImage(scene, 0, 0, scene.width, scene.height, 0, 0, W, H);
       cctx.drawImage(fx, 0, 0, fx.width, fx.height, 0, 0, W, H);
 
       // 画风色调
@@ -498,7 +602,25 @@
       setSeason(s) { state.season = s; baseKey = ''; ensureBase(); },
       setStyle(s) { state.style = s; },
       setParam(k, v) { state[k] = v; if (k === 'portrait') { baseKey = ''; ensureBase(); } },
-      getMeta() { return A.SCENE_META[state.scene]; }
+      getMeta() { return A.SCENE_META[state.scene]; },
+      /* ---- 宠物交互 API ---- */
+      pet,
+      setPetEnabled(v) { petEnabled = !!v; pet.setEnabled(!!v); },
+      petEnabled: () => petEnabled,
+      setPetKind(k) {
+        if (!A.PET_KINDS[k]) return;
+        petKind = k;
+        petReady = false;
+        loadPetKind(k).then(() => { petReady = true; }).catch(e => console.error(e));
+      },
+      petKind: () => petKind,
+      petSetCursor(x, y, active) { pet.setCursor(x, y, active); },
+      petDown(x, y) { pet.onDown(x, y); },
+      petMove(x, y) { pet.onMove(x, y); },
+      petUp() { pet.onUp(); },
+      petFeed(x, y) { pet.dropFood(x, y); },
+      petHasFood: () => pet.hasFood(),
+      petState: () => pet.state.state
     };
   }
 
